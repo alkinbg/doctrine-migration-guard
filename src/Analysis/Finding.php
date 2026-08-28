@@ -14,7 +14,7 @@ final class Finding
         public readonly ?string $sql,
         public readonly string $reason,
     ) {
-        if ($line !== null && $line < 1) {
+        if (null !== $line && $line < 1) {
             throw new InvalidArgumentException('Finding line must be null or a positive integer.');
         }
     }

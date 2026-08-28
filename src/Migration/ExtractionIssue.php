@@ -12,7 +12,7 @@ final class ExtractionIssue
         public readonly ?int $line,
         public readonly string $reason,
     ) {
-        if ($line !== null && $line < 1) {
+        if (null !== $line && $line < 1) {
             throw new InvalidArgumentException('Extraction issue line must be null or a positive integer.');
         }
     }

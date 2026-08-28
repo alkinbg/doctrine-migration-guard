@@ -6,10 +6,18 @@ namespace AlkinBG\DoctrineMigrationGuard\Migration;
 
 use PhpParser\Error;
 use PhpParser\Node\Expr;
+use PhpParser\Node\Expr\Array_;
 use PhpParser\Node\Expr\BinaryOp\Concat;
+use PhpParser\Node\Expr\ClassConstFetch;
+use PhpParser\Node\Expr\ConstFetch;
 use PhpParser\Node\Expr\MethodCall;
+use PhpParser\Node\Expr\UnaryMinus;
+use PhpParser\Node\Expr\UnaryPlus;
 use PhpParser\Node\Expr\Variable;
 use PhpParser\Node\Identifier;
+use PhpParser\Node\Name;
+use PhpParser\Node\Scalar\Float_;
+use PhpParser\Node\Scalar\Int_;
 use PhpParser\Node\Scalar\String_;
 use PhpParser\Node\Stmt\Class_;
 use PhpParser\Node\Stmt\ClassMethod;
@@ -29,7 +37,7 @@ final class MigrationSqlExtractor
         }
 
         $code = file_get_contents($path);
-        if ($code === false) {
+        if (false === $code) {
             return new MigrationExtraction([], [new ExtractionIssue(null, 'Migration file could not be read.')]);
         }
 
@@ -40,7 +48,7 @@ final class MigrationSqlExtractor
             $line = $error->getStartLine();
 
             return new MigrationExtraction([], [
-                new ExtractionIssue($line > 0 ? $line : null, 'PHP parse error: '.$error->getMessage()),
+                new ExtractionIssue($line > 0 ? $line : null, 'PHP parse error: ' . $error->getMessage()),
             ]);
         }
 
@@ -54,7 +62,7 @@ final class MigrationSqlExtractor
         /** @var list<Class_> $migrationClasses */
         $migrationClasses = [];
         foreach ($classes as $class) {
-            if ($class->extends !== null && $class->extends->toString() === 'Doctrine\\Migrations\\AbstractMigration') {
+            if (null !== $class->extends && 'Doctrine\\Migrations\\AbstractMigration' === $class->extends->toString()) {
                 $migrationClasses[] = $class;
             }
         }
@@ -65,20 +73,22 @@ final class MigrationSqlExtractor
             ]);
         }
 
-        if (count($migrationClasses) !== 1) {
+        if (1 !== count($migrationClasses)) {
             return new MigrationExtraction([], [
                 new ExtractionIssue(null, 'File contains multiple Doctrine migration classes.'),
             ]);
         }
 
-        $up = $this->findUpMethod($migrationClasses[0]);
-        if ($up === null) {
+        $migrationClass = $migrationClasses[0];
+
+        $up = $this->findUpMethod($migrationClass);
+        if (null === $up) {
             return new MigrationExtraction([], [
                 new ExtractionIssue(null, 'Doctrine migration does not define up().'),
             ]);
         }
 
-        if ($up->stmts === null) {
+        if (null === $up->stmts) {
             return new MigrationExtraction([], [
                 new ExtractionIssue($up->getStartLine(), 'Doctrine migration up() has no executable body.'),
             ]);
@@ -88,6 +98,23 @@ final class MigrationSqlExtractor
         $statements = [];
         /** @var list<ExtractionIssue> $issues */
         $issues = [];
+        $preUp = $this->findMethod($migrationClass, 'preUp');
+
+        if (null !== $preUp) {
+            $issues[] = new ExtractionIssue(
+                $this->positiveLine($preUp->getStartLine()),
+                'Doctrine migration overrides preUp(), which is not analyzed.',
+            );
+        }
+
+        $postUp = $this->findMethod($migrationClass, 'postUp');
+
+        if (null !== $postUp) {
+            $issues[] = new ExtractionIssue(
+                $this->positiveLine($postUp->getStartLine()),
+                'Doctrine migration overrides postUp(), which is not analyzed.',
+            );
+        }
 
         foreach ($up->stmts as $statement) {
             if ($statement instanceof Nop) {
@@ -95,26 +122,49 @@ final class MigrationSqlExtractor
             }
 
             if (!$statement instanceof Expression || !$statement->expr instanceof MethodCall) {
-                $issues[] = new ExtractionIssue($this->positiveLine($statement->getStartLine()), 'Unsupported executable statement in up().');
+                $issues[] = new ExtractionIssue(
+                    $this->positiveLine($statement->getStartLine()),
+                    'Unsupported executable statement in up().'
+                );
                 continue;
             }
 
             $call = $statement->expr;
             if (!$this->isDirectAddSqlCall($call)) {
-                $issues[] = new ExtractionIssue($this->positiveLine($statement->getStartLine()), 'Unsupported executable statement in up().');
+                $issues[] = new ExtractionIssue(
+                    $this->positiveLine($statement->getStartLine()),
+                    'Unsupported executable statement in up().'
+                );
                 continue;
             }
 
             $args = $call->getArgs();
             if ($args === []) {
-                $issues[] = new ExtractionIssue($this->positiveLine($statement->getStartLine()), 'addSql() requires a SQL argument.');
+                $issues[] = new ExtractionIssue(
+                    $this->positiveLine($statement->getStartLine()),
+                    'addSql() requires a SQL argument.'
+                );
                 continue;
             }
 
             $sql = $this->resolveStaticString($args[0]->value);
-            if ($sql === null) {
-                $issues[] = new ExtractionIssue($this->positiveLine($statement->getStartLine()), 'addSql() SQL argument is not statically resolvable.');
+            if (null === $sql) {
+                $issues[] = new ExtractionIssue(
+                    $this->positiveLine($statement->getStartLine()),
+                    'addSql() SQL argument is not statically resolvable.'
+                );
                 continue;
+            }
+
+            foreach (array_slice($args, 1) as $argument) {
+                if (!$this->isStaticDataExpression($argument->value)) {
+                    $issues[] = new ExtractionIssue(
+                        $this->positiveLine($statement->getStartLine()),
+                        'addSql() contains an unsupported additional argument.',
+                    );
+
+                    break;
+                }
             }
 
             $statements[] = new ExtractedStatement($sql, $statement->getStartLine());
@@ -125,21 +175,15 @@ final class MigrationSqlExtractor
 
     private function findUpMethod(Class_ $class): ?ClassMethod
     {
-        foreach ($class->getMethods() as $method) {
-            if (strtolower($method->name->toString()) === 'up') {
-                return $method;
-            }
-        }
-
-        return null;
+        return $this->findMethod($class, 'up');
     }
 
     private function isDirectAddSqlCall(MethodCall $call): bool
     {
         return $call->var instanceof Variable
-            && $call->var->name === 'this'
+            && 'this' === $call->var->name
             && $call->name instanceof Identifier
-            && strtolower($call->name->toString()) === 'addsql';
+            && 'addsql' === strtolower($call->name->toString());
     }
 
     private function resolveStaticString(Expr $expr): ?string
@@ -152,7 +196,7 @@ final class MigrationSqlExtractor
             $left = $this->resolveStaticString($expr->left);
             $right = $this->resolveStaticString($expr->right);
 
-            return $left !== null && $right !== null ? $left.$right : null;
+            return null !== $left && null !== $right ? $left . $right : null;
         }
 
         return null;
@@ -161,5 +205,70 @@ final class MigrationSqlExtractor
     private function positiveLine(int $line): ?int
     {
         return $line > 0 ? $line : null;
+    }
+
+    private function isStaticDataExpression(Expr $expr): bool
+    {
+        if (
+            $expr instanceof String_
+            || $expr instanceof Int_
+            || $expr instanceof Float_
+        ) {
+            return true;
+        }
+
+        if ($expr instanceof ConstFetch) {
+            return in_array(
+                strtolower($expr->name->toString()),
+                ['true', 'false', 'null'],
+                true,
+            );
+        }
+
+        if (
+            $expr instanceof ClassConstFetch
+            && $expr->class instanceof Name
+            && $expr->name instanceof Identifier
+        ) {
+            return true;
+        }
+
+        if ($expr instanceof UnaryMinus || $expr instanceof UnaryPlus) {
+            return $expr->expr instanceof Int_ || $expr->expr instanceof Float_;
+        }
+
+        if ($expr instanceof Array_) {
+            foreach ($expr->items as $item) {
+                if ($item->byRef || $item->unpack) {
+                    return false;
+                }
+
+                if (
+                    null !== $item->key
+                    && !$this->isStaticDataExpression($item->key)
+                ) {
+                    return false;
+                }
+
+                if (!$this->isStaticDataExpression($item->value)) {
+                    return false;
+                }
+            }
+
+            return true;
+        }
+
+        return false;
+    }
+
+    private function findMethod(Class_ $class, string $name): ?ClassMethod
+    {
+        foreach ($class->getMethods() as $method) {
+            if (0 === strcasecmp($method->name->toString(), $name)) {
+                return $method;
+            }
+        }
+
+        return null;
     }
 }

@@ -5,9 +5,13 @@ declare(strict_types=1);
 namespace AlkinBG\DoctrineMigrationGuard\Reporting;
 
 use AlkinBG\DoctrineMigrationGuard\Analysis\AnalysisResult;
+use JsonException;
 
 final class JsonReporter
 {
+    /**
+     * @throws JsonException
+     */
     public function render(AnalysisResult $result): string
     {
         $files = [];

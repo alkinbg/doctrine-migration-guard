@@ -26,9 +26,13 @@ final class MigrationSqlExtractorTest extends TestCase
             'CREATE TABLE demo (id INT)',
             'ALTER TABLE demo ADD nickname VARCHAR(64) DEFAULT NULL',
             "UPDATE demo SET touched = 1\nWHERE id = 1",
-        ], array_map(static fn ($statement): string => $statement->sql, $extraction->statements));
-        self::assertSame([14, 15, 16], array_map(static fn ($statement): int => $statement->line, $extraction->statements));
-        self::assertStringNotContainsString('DROP TABLE demo', implode("\n", array_map(static fn ($statement): string => $statement->sql, $extraction->statements)));
+        ], array_map(static fn($statement): string => $statement->sql, $extraction->statements));
+        self::assertSame([14, 15, 16],
+            array_map(static fn($statement): int => $statement->line, $extraction->statements));
+        self::assertStringNotContainsString(
+            'DROP TABLE demo',
+            implode("\n", array_map(static fn($statement): string => $statement->sql, $extraction->statements))
+        );
     }
 
     public function testRecognizesFullyQualifiedAbstractMigrationParent(): void
@@ -116,14 +120,75 @@ final class MigrationSqlExtractorTest extends TestCase
         self::assertNotNull($extraction->issues[0]->line);
     }
 
+    public function testExecutableAdditionalAddSqlArgumentFailsClosed(): void
+    {
+        $extraction = $this->extractor->extract(
+            $this->fixture('AddSqlExecutableArgumentMigration.php'),
+        );
+
+        self::assertCount(1, $extraction->statements);
+        self::assertSame(
+            ['addSql() contains an unsupported additional argument.'],
+            $this->reasons($extraction),
+        );
+    }
+
+    public function testStaticAdditionalAddSqlArgumentsAreSupported(): void
+    {
+        $extraction = $this->extractor->extract(
+            $this->fixture('AddSqlStaticArgumentsMigration.php'),
+        );
+
+        self::assertSame([], $extraction->issues);
+        self::assertCount(1, $extraction->statements);
+        self::assertSame(
+            'UPDATE users SET active = ? WHERE id = ?',
+            $extraction->statements[0]->sql,
+        );
+    }
+
+    public function testPreUpOverrideFailsClosed(): void
+    {
+        $extraction = $this->extractor->extract(
+            $this->fixture('PreUpMigration.php'),
+        );
+
+        self::assertCount(1, $extraction->statements);
+        self::assertSame(
+            'CREATE TABLE demo (id INT)',
+            $extraction->statements[0]->sql,
+        );
+        self::assertSame(
+            ['Doctrine migration overrides preUp(), which is not analyzed.'],
+            $this->reasons($extraction),
+        );
+    }
+
+    public function testPostUpOverrideFailsClosed(): void
+    {
+        $extraction = $this->extractor->extract(
+            $this->fixture('PostUpMigration.php'),
+        );
+
+        self::assertCount(1, $extraction->statements);
+        self::assertSame(
+            'CREATE TABLE demo (id INT)',
+            $extraction->statements[0]->sql,
+        );
+        self::assertSame(
+            ['Doctrine migration overrides postUp(), which is not analyzed.'],
+            $this->reasons($extraction),
+        );
+    }
+
     private function fixture(string $name): string
     {
-        return dirname(__DIR__, 2).'/Fixtures/Migrations/'.$name;
+        return dirname(__DIR__, 2) . '/Fixtures/Migrations/' . $name;
     }
 
     /** @return list<string> */
     private function reasons(MigrationExtraction $extraction): array
     {
-        return array_map(static fn ($issue): string => $issue->reason, $extraction->issues);
+        return array_map(static fn($issue): string => $issue->reason, $extraction->issues);
     }
 }

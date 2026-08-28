@@ -19,7 +19,7 @@ final class TextReporter
 
             foreach ($file->findings as $finding) {
                 $severity = strtoupper($finding->severity->value);
-                $line = $finding->line !== null ? (string) $finding->line : '-';
+                $line = null !== $finding->line ? (string) $finding->line : '-';
                 $sql = $this->compactSql($finding->sql);
                 $output .= sprintf("  %-10s line %-4s %s\n", $severity, $line, $sql);
                 $output .= '             '.$finding->reason."\n";
@@ -42,7 +42,7 @@ final class TextReporter
 
     private function compactSql(?string $sql): string
     {
-        if ($sql === null) {
+        if (null === $sql) {
             return 'SQL unavailable';
         }
 

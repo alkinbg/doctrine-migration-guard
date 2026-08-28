@@ -58,7 +58,7 @@ final class AnalyzeCommand extends Command
         }
 
         $format = $input->getOption('format');
-        if (!is_string($format) || !in_array($format, ['text', 'json'], true)) {
+        if ('text' !== $format && 'json' !== $format) {
             throw new InvalidArgumentException('Unsupported format. Expected text or json.');
         }
 
@@ -89,7 +89,7 @@ final class AnalyzeCommand extends Command
         }
 
         $analysis = new AnalysisResult($fileResults);
-        $rendered = $format === 'json'
+        $rendered = 'json' === $format
             ? $this->jsonReporter->render($analysis)
             : $this->textReporter->render($analysis);
 

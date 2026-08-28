@@ -8,14 +8,14 @@ final class SqlLexicalScanner
 {
     public function hasTopLevelKeyword(string $sql, string $keyword): bool
     {
-        if ($keyword === '' || preg_match('/^[A-Za-z_][A-Za-z0-9_]*$/D', $keyword) !== 1) {
+        if ('' === $keyword || 1 !== preg_match('/^[A-Za-z_][A-Za-z0-9_]*$/D', $keyword)) {
             return false;
         }
 
         $mask = $this->topLevelMask($sql);
-        $pattern = '/(?<![A-Za-z0-9_])'.preg_quote($keyword, '/').'(?![A-Za-z0-9_])/i';
+        $pattern = '/(?<![A-Za-z0-9_])' . preg_quote($keyword, '/') . '(?![A-Za-z0-9_])/i';
 
-        return preg_match($pattern, $mask) === 1;
+        return 1 === preg_match($pattern, $mask);
     }
 
     public function hasTopLevelComma(string $sql): bool
@@ -28,9 +28,9 @@ final class SqlLexicalScanner
         $mask = $this->topLevelMask($sql);
         $offset = 0;
 
-        while (($semicolon = strpos($mask, ';', $offset)) !== false) {
+        while (false !== ($semicolon = strpos($mask, ';', $offset))) {
             $remainder = substr($mask, $semicolon + 1);
-            if (preg_match('/[^\s;]/', $remainder) === 1) {
+            if (1 === preg_match('/[^\s;]/', $remainder)) {
                 return true;
             }
 
@@ -53,6 +53,21 @@ final class SqlLexicalScanner
     public function hasModeDependentBackslashEscape(string $sql): bool
     {
         return $this->scan($sql)['modeDependentBackslashEscape'];
+    }
+
+    public function hasObviouslyTautologicalTopLevelWhere(string $sql): bool
+    {
+        $mask = trim($this->topLevelMask($sql));
+
+        if (1 !== preg_match('/\bWHERE\b(?<predicate>.*)$/is', $mask, $matches)) {
+            return false;
+        }
+
+        $predicate = trim($matches['predicate']);
+        $predicate = preg_replace('/;\s*$/', '', $predicate) ?? $predicate;
+        $predicate = trim($predicate);
+
+        return 1 === preg_match('/^(?:TRUE|1\s*=\s*1)$/iD', $predicate);
     }
 
     private function topLevelMask(string $sql): string
@@ -80,8 +95,8 @@ final class SqlLexicalScanner
             $fourth = $i + 3 < $length ? $sql[$i + 3] : null;
 
             if ($lineComment) {
-                $mask .= $char === "\n" || $char === "\r" ? $char : ' ';
-                if ($char === "\n" || $char === "\r") {
+                $mask .= "\n" === $char || "\r" === $char ? $char : ' ';
+                if ("\n" === $char || "\r" === $char) {
                     $lineComment = false;
                 }
                 continue;
@@ -89,7 +104,7 @@ final class SqlLexicalScanner
 
             if ($blockComment) {
                 $mask .= ' ';
-                if ($char === '*' && $next === '/') {
+                if ('*' === $char && '/' === $next) {
                     $mask .= ' ';
                     ++$i;
                     $blockComment = false;
@@ -97,11 +112,11 @@ final class SqlLexicalScanner
                 continue;
             }
 
-            if ($quote !== null) {
+            if (null !== $quote) {
                 $mask .= ' ';
 
-                if ($char === '\\' && $next !== null) {
-                    if ($quote !== '`') {
+                if ('\\' === $char && null !== $next) {
+                    if ('`' !== $quote) {
                         $modeDependentBackslashEscape = true;
                     }
 
@@ -123,21 +138,21 @@ final class SqlLexicalScanner
                 continue;
             }
 
-            if ($char === '#') {
+            if ('#' === $char) {
                 $lineComment = true;
                 $mask .= ' ';
                 continue;
             }
 
-            if ($char === '-' && $next === '-' && $third !== null && $this->isWhitespaceOrControl($third)) {
+            if ('-' === $char && '-' === $next && null !== $third && $this->isWhitespaceOrControl($third)) {
                 $lineComment = true;
                 $mask .= '  ';
                 ++$i;
                 continue;
             }
 
-            if ($char === '/' && $next === '*') {
-                if ($third === '!' || (($third === 'M' || $third === 'm') && $fourth === '!')) {
+            if ('/' === $char && '*' === $next) {
+                if ('!' === $third || (('M' === $third || 'm' === $third) && '!' === $fourth)) {
                     $executableComment = true;
                 }
 
@@ -147,19 +162,19 @@ final class SqlLexicalScanner
                 continue;
             }
 
-            if ($char === "'" || $char === '"' || $char === '`') {
+            if ("'" === $char || '"' === $char || '`' === $char) {
                 $quote = $char;
                 $mask .= ' ';
                 continue;
             }
 
-            if ($char === '(') {
+            if ('(' === $char) {
                 ++$depth;
                 $mask .= ' ';
                 continue;
             }
 
-            if ($char === ')') {
+            if (')' === $char) {
                 if ($depth > 0) {
                     --$depth;
                 } else {
@@ -169,12 +184,12 @@ final class SqlLexicalScanner
                 continue;
             }
 
-            $mask .= $depth === 0 ? $char : ' ';
+            $mask .= 0 === $depth ? $char : ' ';
         }
 
         return [
             'mask' => $mask,
-            'complete' => $quote === null && !$blockComment && $depth === 0 && !$unmatchedClosingParenthesis,
+            'complete' => null === $quote && !$blockComment && 0 === $depth && !$unmatchedClosingParenthesis,
             'executableComment' => $executableComment,
             'modeDependentBackslashEscape' => $modeDependentBackslashEscape,
         ];
@@ -184,6 +199,6 @@ final class SqlLexicalScanner
     {
         $ord = ord($char);
 
-        return $ord <= 32 || $ord === 127;
+        return $ord <= 32 || 127 === $ord;
     }
 }

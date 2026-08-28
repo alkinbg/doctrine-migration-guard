@@ -19,7 +19,7 @@ final class SqlRiskAnalyzer
     {
         $sql = trim($statement->sql);
 
-        if ($sql === '') {
+        if ('' === $sql) {
             return $this->finding($statement, Severity::Unanalyzed, $sql, 'SQL statement is empty.');
         }
 
@@ -59,52 +59,120 @@ final class SqlRiskAnalyzer
             );
         }
 
-        if (preg_match('/^ALTER\s+TABLE\b/i', $sql) === 1) {
+        if (1 === preg_match('/^ALTER\s+TABLE\b/i', $sql)) {
             return $this->analyzeAlterTable($statement, $sql);
         }
 
-        if (preg_match('/^CREATE\s+TABLE\b/i', $sql) === 1) {
-            return $this->finding($statement, Severity::Info, $sql, 'Creating a new table is recognized by the static ruleset.');
+        if (1 === preg_match('/^CREATE\s+TABLE\b/i', $sql)) {
+            return $this->finding(
+                $statement,
+                Severity::Info,
+                $sql,
+                'Creating a new table is recognized by the static ruleset.'
+            );
         }
 
-        if (preg_match('/^DROP\s+TABLE\b/i', $sql) === 1) {
-            return $this->finding($statement, Severity::Critical, $sql, 'Dropping a table permanently removes its stored data.');
+        if (1 === preg_match('/^DROP\s+TABLE\b/i', $sql)) {
+            return $this->finding(
+                $statement,
+                Severity::Critical,
+                $sql,
+                'Dropping a table permanently removes its stored data.'
+            );
         }
 
-        if (preg_match('/^TRUNCATE(?:\s+TABLE)?\b/i', $sql) === 1) {
+        if (1 === preg_match('/^TRUNCATE(?:\s+TABLE)?\b/i', $sql)) {
             return $this->finding($statement, Severity::Critical, $sql, 'Truncating a table removes all stored rows.');
         }
 
-        if (preg_match('/^RENAME\s+TABLE\b/i', $sql) === 1) {
-            return $this->finding($statement, Severity::High, $sql, 'Renaming a table can break code that still references the old name.');
+        if (1 === preg_match('/^RENAME\s+TABLE\b/i', $sql)) {
+            return $this->finding(
+                $statement,
+                Severity::High,
+                $sql,
+                'Renaming a table can break code that still references the old name.'
+            );
         }
 
-        if (preg_match('/^CREATE\s+UNIQUE\s+INDEX\b/i', $sql) === 1) {
-            return $this->finding($statement, Severity::High, $sql, 'Creating a unique index can fail when existing rows contain duplicate values.');
+        if (1 === preg_match('/^CREATE\s+UNIQUE\s+INDEX\b/i', $sql)) {
+            return $this->finding(
+                $statement,
+                Severity::High,
+                $sql,
+                'Creating a unique index can fail when existing rows contain duplicate values.'
+            );
         }
 
-        if (preg_match('/^CREATE\s+INDEX\b/i', $sql) === 1) {
-            return $this->finding($statement, Severity::Warning, $sql, 'Creating an index can lock or impact a large existing table.');
+        if (1 === preg_match('/^CREATE\s+INDEX\b/i', $sql)) {
+            return $this->finding(
+                $statement,
+                Severity::Warning,
+                $sql,
+                'Creating an index can lock or impact a large existing table.'
+            );
         }
 
-        if (preg_match('/^DROP\s+INDEX\b/i', $sql) === 1) {
-            return $this->finding($statement, Severity::Warning, $sql, 'Dropping an index can change query performance.');
+        if (1 === preg_match('/^DROP\s+INDEX\b/i', $sql)) {
+            return $this->finding(
+                $statement,
+                Severity::Warning,
+                $sql,
+                'Dropping an index can change query performance.'
+            );
         }
 
-        if (preg_match('/^UPDATE\b/i', $sql) === 1) {
-            if ($this->scanner->hasTopLevelKeyword($sql, 'WHERE')) {
-                return $this->finding($statement, Severity::Warning, $sql, 'A bounded UPDATE changes existing rows and deserves review.');
+        if (1 === preg_match('/^UPDATE\b/i', $sql)) {
+            if ($this->scanner->hasObviouslyTautologicalTopLevelWhere($sql)) {
+                return $this->finding(
+                    $statement,
+                    Severity::High,
+                    $sql,
+                    'An UPDATE with an obviously tautological WHERE can modify every row in the target table.',
+                );
             }
 
-            return $this->finding($statement, Severity::High, $sql, 'An UPDATE without a top-level WHERE can modify every row in the target table.');
-        }
-
-        if (preg_match('/^DELETE\b/i', $sql) === 1) {
             if ($this->scanner->hasTopLevelKeyword($sql, 'WHERE')) {
-                return $this->finding($statement, Severity::Warning, $sql, 'A bounded DELETE removes existing rows and deserves review.');
+                return $this->finding(
+                    $statement,
+                    Severity::Warning,
+                    $sql,
+                    'An UPDATE with a top-level WHERE changes existing rows and deserves review.',
+                );
             }
 
-            return $this->finding($statement, Severity::Critical, $sql, 'A DELETE without a top-level WHERE can remove every row in the target table.');
+            return $this->finding(
+                $statement,
+                Severity::High,
+                $sql,
+                'An UPDATE without a top-level WHERE can modify every row in the target table.',
+            );
+        }
+
+        if (1 === preg_match('/^DELETE\b/i', $sql)) {
+            if ($this->scanner->hasObviouslyTautologicalTopLevelWhere($sql)) {
+                return $this->finding(
+                    $statement,
+                    Severity::Critical,
+                    $sql,
+                    'A DELETE with an obviously tautological WHERE can remove every row in the target table.',
+                );
+            }
+
+            if ($this->scanner->hasTopLevelKeyword($sql, 'WHERE')) {
+                return $this->finding(
+                    $statement,
+                    Severity::Warning,
+                    $sql,
+                    'A DELETE with a top-level WHERE removes existing rows and deserves review.',
+                );
+            }
+
+            return $this->finding(
+                $statement,
+                Severity::Critical,
+                $sql,
+                'A DELETE without a top-level WHERE can remove every row in the target table.',
+            );
         }
 
         return $this->finding($statement, Severity::Unanalyzed, $sql, 'Unsupported SQL operation.');
@@ -112,8 +180,8 @@ final class SqlRiskAnalyzer
 
     private function analyzeAlterTable(ExtractedStatement $statement, string $sql): Finding
     {
-        $pattern = '/^ALTER\s+TABLE\s+'.self::TABLE_IDENTIFIER.'\s+(?<action>.+)$/is';
-        if (preg_match($pattern, $sql, $matches) !== 1) {
+        $pattern = '/^ALTER\s+TABLE\s+' . self::TABLE_IDENTIFIER . '\s+(?<action>.+)$/is';
+        if (1 !== preg_match($pattern, $sql, $matches)) {
             return $this->finding($statement, Severity::Unanalyzed, $sql, 'Unsupported ALTER TABLE operation.');
         }
 
@@ -127,49 +195,107 @@ final class SqlRiskAnalyzer
             );
         }
 
-        if (preg_match('/^DROP\s+COLUMN\s+'.self::IDENTIFIER.'\b/i', $action) === 1) {
-            return $this->finding($statement, Severity::Critical, $sql, 'Dropping a column permanently removes stored data.');
+        if (1 === preg_match('/^DROP\s+COLUMN\s+' . self::IDENTIFIER . '(?=\s|;|$)/i', $action)) {
+            return $this->finding(
+                $statement,
+                Severity::Critical,
+                $sql,
+                'Dropping a column permanently removes stored data.'
+            );
         }
 
-        if (preg_match('/^DROP\s+FOREIGN\s+KEY\b/i', $action) === 1) {
-            return $this->finding($statement, Severity::Warning, $sql, 'Dropping a foreign key removes an existing referential constraint.');
+        if (1 === preg_match('/^DROP\s+FOREIGN\s+KEY\b/i', $action)) {
+            return $this->finding(
+                $statement,
+                Severity::Warning,
+                $sql,
+                'Dropping a foreign key removes an existing referential constraint.'
+            );
         }
 
-        if (preg_match('/^DROP\s+(?:INDEX|KEY)\b/i', $action) === 1) {
-            return $this->finding($statement, Severity::Warning, $sql, 'Dropping an index can change query performance.');
+        if (1 === preg_match('/^DROP\s+(?:INDEX|KEY)\b/i', $action)) {
+            return $this->finding(
+                $statement,
+                Severity::Warning,
+                $sql,
+                'Dropping an index can change query performance.'
+            );
         }
 
-        if (preg_match('/^ADD\s+(?:CONSTRAINT\s+'.self::IDENTIFIER.'\s+)?FOREIGN\s+KEY\b/i', $action) === 1) {
-            return $this->finding($statement, Severity::Warning, $sql, 'Adding a foreign key can validate or constrain existing rows.');
+        if (1 === preg_match('/^ADD\s+(?:CONSTRAINT\s+' . self::IDENTIFIER . '\s+)?FOREIGN\s+KEY\b/i', $action)) {
+            return $this->finding(
+                $statement,
+                Severity::Warning,
+                $sql,
+                'Adding a foreign key can validate or constrain existing rows.'
+            );
         }
 
-        if (preg_match('/^ADD\s+UNIQUE\s+(?:INDEX|KEY)\b/i', $action) === 1) {
-            return $this->finding($statement, Severity::High, $sql, 'Adding a unique key can fail when existing rows contain duplicate values.');
+        if (1 === preg_match('/^ADD\s+UNIQUE\s+(?:INDEX|KEY)\b/i', $action)) {
+            return $this->finding(
+                $statement,
+                Severity::High,
+                $sql,
+                'Adding a unique key can fail when existing rows contain duplicate values.'
+            );
         }
 
-        if (preg_match('/^ADD\s+(?:INDEX|KEY)\b/i', $action) === 1) {
-            return $this->finding($statement, Severity::Warning, $sql, 'Creating an index can lock or impact a large existing table.');
+        if (1 === preg_match('/^ADD\s+(?:INDEX|KEY)\b/i', $action)) {
+            return $this->finding(
+                $statement,
+                Severity::Warning,
+                $sql,
+                'Creating an index can lock or impact a large existing table.'
+            );
         }
 
-        if (preg_match('/^RENAME\s+COLUMN\b/i', $action) === 1) {
-            return $this->finding($statement, Severity::High, $sql, 'Renaming a column can break code that still references the old name.');
+        if (1 === preg_match('/^RENAME\s+COLUMN\b/i', $action)) {
+            return $this->finding(
+                $statement,
+                Severity::High,
+                $sql,
+                'Renaming a column can break code that still references the old name.'
+            );
         }
 
-        if (preg_match('/^RENAME\s+(?:TO|AS)\b/i', $action) === 1) {
-            return $this->finding($statement, Severity::High, $sql, 'Renaming a table can break code that still references the old name.');
+        if (1 === preg_match('/^RENAME\s+(?:TO|AS)\b/i', $action)) {
+            return $this->finding(
+                $statement,
+                Severity::High,
+                $sql,
+                'Renaming a table can break code that still references the old name.'
+            );
         }
 
-        if (preg_match('/^(?:MODIFY(?:\s+COLUMN)?|CHANGE(?:\s+COLUMN)?|ALTER\s+COLUMN)\b/i', $action) === 1) {
-            return $this->finding($statement, Severity::High, $sql, 'Changing an existing column definition can rewrite data or break compatibility.');
+        if (1 === preg_match('/^(?:MODIFY(?:\s+COLUMN)?|CHANGE(?:\s+COLUMN)?|ALTER\s+COLUMN)\b/i', $action)) {
+            return $this->finding(
+                $statement,
+                Severity::High,
+                $sql,
+                'Changing an existing column definition can rewrite data or break compatibility.'
+            );
         }
 
-        if (preg_match('/^ADD\s+(?:COLUMN\s+)?(?:CONSTRAINT|PRIMARY|UNIQUE|INDEX|KEY|FOREIGN|CHECK|FULLTEXT|SPATIAL)\b/i', $action) === 1) {
+        if (1 === preg_match(
+                '/^ADD\s+(?:COLUMN\s+)?(?:CONSTRAINT|PRIMARY|UNIQUE|INDEX|KEY|FOREIGN|CHECK|FULLTEXT|SPATIAL)\b/i',
+                $action
+            )) {
             return $this->finding($statement, Severity::Unanalyzed, $sql, 'Unsupported ALTER TABLE operation.');
         }
 
-        $columnPattern = '/^ADD\s+(?:COLUMN\s+)?'.self::IDENTIFIER.'\s+(?<definition>.+)$/is';
-        if (preg_match($columnPattern, $action, $matches) === 1) {
+        $columnPattern = '/^ADD\s+(?:COLUMN\s+)?' . self::IDENTIFIER . '\s+(?<definition>.+)$/is';
+        if (1 === preg_match($columnPattern, $action, $matches)) {
             $definition = $matches['definition'];
+            foreach (['PRIMARY', 'UNIQUE', 'REFERENCES', 'CHECK'] as $constraintKeyword) {
+                if ($this->scanner->hasTopLevelKeyword($definition, $constraintKeyword)) {
+                    return $this->finding(
+                        $statement,
+                        Severity::Unanalyzed,
+                        $sql,
+                        'Inline column constraints are not supported.',
+                    );
+                }
+            }
             $notNull = $this->scanner->hasTopLevelKeyword($definition, 'NOT')
                 && $this->scanner->hasTopLevelKeyword($definition, 'NULL');
             $hasDefault = $this->scanner->hasTopLevelKeyword($definition, 'DEFAULT');

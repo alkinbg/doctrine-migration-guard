@@ -33,7 +33,7 @@ final class InputResolver
                     continue;
                 }
 
-                if (strtolower(pathinfo($input, PATHINFO_EXTENSION)) !== 'php') {
+                if ('php' !== strtolower(pathinfo($input, PATHINFO_EXTENSION))) {
                     $issues[] = new InputIssue($input, 'Input file is not a PHP file.');
                     continue;
                 }
@@ -54,7 +54,7 @@ final class InputResolver
 
             /** @var SplFileInfo $fileInfo */
             foreach ($iterator as $fileInfo) {
-                if (!$fileInfo->isFile() || strtolower($fileInfo->getExtension()) !== 'php') {
+                if (!$fileInfo->isFile() || 'php' !== strtolower($fileInfo->getExtension())) {
                     continue;
                 }
 
@@ -84,7 +84,7 @@ final class InputResolver
     {
         $realPath = realpath($path);
 
-        return $this->normalizePath($realPath !== false ? $realPath : $path);
+        return $this->normalizePath(false !== $realPath ? $realPath : $path);
     }
 
     private function normalizePath(string $path): string
