@@ -1,0 +1,68 @@
+name: Bug report
+description: Report incorrect analysis, unexpected behavior, or a regression
+title: "[Bug] "
+labels:
+  - bug
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting a problem with Doctrine Migration Guard.
+
+        Please provide a minimal reproducible example whenever possible.
+
+  - type: input
+    id: version
+    attributes:
+      label: Doctrine Migration Guard version
+      description: For example, v0.1.0
+      placeholder: v0.1.0
+    validations:
+      required: true
+
+  - type: input
+    id: php-version
+    attributes:
+      label: PHP version
+      placeholder: 8.4.0
+    validations:
+      required: true
+
+  - type: textarea
+    id: migration
+    attributes:
+      label: Migration or SQL example
+      description: Provide the smallest migration or SQL example that reproduces the issue.
+      render: php
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+      description: What result, severity, exit code, or output did you expect?
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+      description: What happened instead?
+    validations:
+      required: true
+
+  - type: textarea
+    id: additional
+    attributes:
+      label: Additional context
+      description: Add any other information that may help reproduce or understand the issue.
+
+  - type: checkboxes
+    id: security
+    attributes:
+      label: Security
+      options:
+        - label: This is not a security vulnerability. Security-sensitive reports should follow SECURITY.md instead of being filed publicly.
+          required: true

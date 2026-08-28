@@ -1,0 +1,64 @@
+name: Feature request
+description: Suggest a focused improvement to Doctrine Migration Guard
+title: "[Feature] "
+labels:
+  - enhancement
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for suggesting an improvement.
+
+        Doctrine Migration Guard intentionally keeps a narrow, conservative scope. Please explain the concrete problem before proposing the solution.
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: What real migration-analysis or CI problem are you trying to solve?
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed solution
+      description: Describe the smallest change that would solve the problem.
+    validations:
+      required: true
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - SQL risk rule
+        - Migration extraction
+        - CLI behavior
+        - JSON output
+        - CI/documentation
+        - Database platform support
+        - Other
+    validations:
+      required: true
+
+  - type: textarea
+    id: examples
+    attributes:
+      label: Example migration or SQL
+      description: Add a concrete example if the request concerns analysis behavior.
+      render: php
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: Describe any simpler workaround or alternative you considered.
+
+  - type: checkboxes
+    id: scope
+    attributes:
+      label: Scope check
+      options:
+        - label: I understand that broader features may be declined to keep the analyzer deterministic, CI-friendly, and fail-closed.
+          required: true
