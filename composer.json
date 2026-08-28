@@ -1,8 +1,27 @@
 {
   "name": "alkinbg/doctrine-migration-guard",
-  "description": "Static risk analysis for Doctrine migrations on MySQL and MariaDB.",
+  "description": "CI-first static risk analysis for Doctrine migrations on MySQL and MariaDB.",
   "type": "library",
+  "keywords": [
+    "ci",
+    "doctrine",
+    "mariadb",
+    "migrations",
+    "mysql",
+    "static analysis"
+  ],
+  "homepage": "https://github.com/alkinbg/doctrine-migration-guard",
   "license": "MIT",
+  "authors": [
+    {
+      "name": "Alkin Fehim",
+      "role": "Developer"
+    }
+  ],
+  "support": {
+    "issues": "https://github.com/alkinbg/doctrine-migration-guard/issues",
+    "source": "https://github.com/alkinbg/doctrine-migration-guard"
+  },
   "require": {
     "php": ">=8.1",
     "nikic/php-parser": "^5.8",

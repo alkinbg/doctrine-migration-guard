@@ -16,7 +16,7 @@ The v0.1 ruleset recognizes common operations such as:
 - nullable and `NOT NULL` column additions;
 - column/table renames and column definition changes;
 - `DROP TABLE`, `DROP COLUMN`, and `TRUNCATE`;
-- bounded and unbounded `UPDATE` / `DELETE`;
+- `UPDATE` / `DELETE` statements with and without a top-level `WHERE`;
 - normal and unique indexes;
 - foreign-key additions and removals.
 
@@ -85,9 +85,9 @@ Result precedence is `INCOMPLETE > FAILED > PASSED`.
 | Level | Typical meaning |
 | --- | --- |
 | `INFO` | Recognized low-risk static pattern, such as creating a table or adding a nullable column. |
-| `WARNING` | Change deserves review, such as a bounded data update, normal index, or foreign key operation. |
-| `HIGH` | Significant migration risk, such as an unbounded `UPDATE`, unique index, rename, or `NOT NULL` column without a default. |
-| `CRITICAL` | Destructive operation such as `DROP TABLE`, `DROP COLUMN`, `TRUNCATE`, or unbounded `DELETE`. |
+| `WARNING` | Change deserves review, such as an `UPDATE` / `DELETE` with a top-level `WHERE`, normal index, or foreign key operation. |
+| `HIGH` | Significant migration risk, such as an `UPDATE` without a top-level `WHERE`, unique index, rename, or `NOT NULL` column without a default. |
+| `CRITICAL` | Destructive operation such as `DROP TABLE`, `DROP COLUMN`, `TRUNCATE`, or a `DELETE` without a top-level `WHERE`. |
 | `UNANALYZED` | The guard cannot classify the construct reliably and fails closed. |
 
 Risk levels are static review signals, not database-runtime guarantees.
@@ -111,6 +111,7 @@ final class Version20260827120000 extends AbstractMigration
 ```
 
 Static string literals, heredoc/nowdoc strings, and concatenations made entirely from static strings can be analyzed.
+Additional `addSql()` parameter and type arguments are accepted only when they are statically representable. Dynamic or executable expressions in additional arguments make the migration analysis `INCOMPLETE`.
 
 The following intentionally make analysis incomplete in v0.1:
 
@@ -127,7 +128,9 @@ $this->connection->executeStatement('UPDATE users SET active = 0');
 $schema->getTable('users');
 ```
 
-Only `up()` is analyzed. `down()` is ignored.
+Only direct supported operations inside `up()` are analyzed. `down()` is ignored.
+
+Overrides of Doctrine lifecycle hooks such as `preUp()` or `postUp()` are not analyzed in v0.1 and therefore make the migration result `INCOMPLETE`. Supported SQL inside `up()` is still extracted and reported.
 
 ## Fail-closed SQL behavior
 
